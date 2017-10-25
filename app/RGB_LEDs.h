@@ -11,9 +11,9 @@
 #define RGB_LEDS_H
 
 
-void init_leds(void);
-void app_rgb_led(void);
-void app_rgb_led_fsm(void);
+extern void init_leds(void);
+extern void app_rgb_led(void);
+extern void app_rgb_led_fsm(void);
 
 
 #endif /* RGB_LEDS_H */
