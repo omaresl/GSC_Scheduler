@@ -36,6 +36,15 @@
 #define BLUE_ON			(GPIOD->PCOR = BLUE_SHIFT)
 #define BLUE_TOGGLE		(GPIOD->PTOR = BLUE_SHIFT)
 
+enum
+{
+	OFF,
+	ON,
+	TOGGLING
+};
+
+T_UBYTE re_LEDaction = TOGGLING;
+
 void delay_time(int);
 void init_leds();
 void red_on();
@@ -67,6 +76,93 @@ void app_rgb_led(void)
 		delay_time(BLINK_DELAY);	/* Green + Blue + Red */
 		green_off();
 		blue_off();
+}
+
+void app_rgb_led_fsm(void)
+{
+	static unsigned char rgb_state = 0;
+
+	if(re_LEDaction == OFF)
+	{
+		/* All off */
+		red_off();
+		green_off();
+		blue_off();
+	}
+	else if(re_LEDaction == ON)
+	{
+		/* White is LED ON */
+		red_on();
+		green_on();
+		blue_on();
+	}
+	else if(re_LEDaction == TOGGLING)
+	{
+		/* Toggling LED color */
+		switch(rgb_state)
+		{
+			case 0: /* RESET */
+				/* All off */
+				red_off();
+				green_off();
+				blue_off();
+				rgb_state = 1;
+				break;
+			case 1: /* red on */
+				red_on();
+				green_off();
+				blue_off();
+				rgb_state = 2;
+				break;
+			case 2: /* green on */
+				red_off();
+				green_on();
+				blue_off();
+				rgb_state = 3;
+				break;
+			case 3: /* blue on */
+				red_off();
+				green_off();
+				blue_on();
+				rgb_state = 4;
+				break;
+			case 4: /* red + green */
+				red_on();
+				green_on();
+				blue_off();
+				rgb_state = 5;
+				break;
+			case 5: /* red + blue */
+				red_on();
+				green_off();
+				blue_on();
+				rgb_state = 6;
+				break;
+			case 6: /* green + blue */
+				red_off();
+				green_on();
+				blue_on();
+				rgb_state = 7;
+				break;
+			case 7: /* All on */
+				red_on();
+				green_on();
+				blue_on();
+				rgb_state = 1;
+				break;
+			default:
+				/* Go to RESET */
+				rgb_state = 0;
+				break;
+		}
+	}
+	else
+	{
+		/* Permanent RED means an error! */
+		red_on();
+		green_off();
+		blue_off();
+	}
 }
 
 void red_on(){

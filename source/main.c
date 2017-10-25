@@ -65,7 +65,8 @@ int main(void)
 	BOARD_BootClockRUN();
 	BOARD_InitDebugConsole();
 
-	SysTick_Config(48000000U/1000U);
+	/* SysTick Configuration */
+	SysTick_Config(48000000U/1000U); //This only applies for ARM Cores with SysTick capability
 
 	/* Scheduler Initialization and tasks initialization  */
 	gsc_sch_core_Init();
