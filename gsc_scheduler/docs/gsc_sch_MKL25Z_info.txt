@@ -1,0 +1,3 @@
+Grandpa´s Clock Scheduler:
+
+Este software es la variante del "Grandpa´s Clock Scheduler" para el microcontrolador MKL25Z.
