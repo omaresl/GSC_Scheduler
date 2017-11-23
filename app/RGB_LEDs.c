@@ -227,17 +227,17 @@ void delay_time(int number){
 	 * Initialize the Green LED (PTB19)
 	 */
 
-		/* Turn on clock to PortB module */
-		SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK;
-
-		/* Set the PTB19 pin multiplexer to GPIO mode */
-		PORTB->PCR[19] = PORT_PCR_MUX(1);
-
-		/* Set the initial output state to high */
-		GPIOB->PSOR |= GREEN_SHIFT;
-
-		/* Set the pins direction to output */
-		GPIOB->PDDR |= GREEN_SHIFT;
+//		/* Turn on clock to PortB module */
+//		SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK;
+//
+//		/* Set the PTB19 pin multiplexer to GPIO mode */
+//		PORTB->PCR[19] = PORT_PCR_MUX(1);
+//
+//		/* Set the initial output state to high */
+//		GPIOB->PSOR |= GREEN_SHIFT;
+//
+//		/* Set the pins direction to output */
+//		GPIOB->PDDR |= GREEN_SHIFT;
 
 
 

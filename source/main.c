@@ -28,6 +28,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdio.h>
+
 #include "fsl_debug_console.h"
 #include "board.h"
 
@@ -65,6 +67,10 @@ int main(void)
 	BOARD_InitPins();
 	BOARD_BootClockRUN();
 	BOARD_InitDebugConsole();
+
+	printf("\nGSC Scheduler\n");
+	printf("\nFor Kinetis KL25Z\n");
+	printf("\nCompiled in MCUXpresso\n");
 
 	/* SysTick Configuration */
 	SysTick_Config(48000000U/1000U); //This only applies for ARM Cores with SysTick capability
