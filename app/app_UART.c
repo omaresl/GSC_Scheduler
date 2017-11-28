@@ -11,6 +11,7 @@
 #include "fsl_clock.h"
 #include "fsl_port.h"
 #include "app_UART.h"
+#include "fsl_common.h"
 
 T_UBYTE rub_UART_RX_Data[16u];
 T_UBYTE rub_UART_TX_Data[16u];
@@ -84,7 +85,6 @@ void app_UART_Init(void)
 	uart_config_t ls_UartConfig;
 
 	/* UART Clock Enable */
-	CLOCK_EnableClock(kCLOCK_Uart2);
 	CLOCK_EnableClock(kCLOCK_PortE);
 
 	/* UART Pin Selection */
@@ -107,7 +107,7 @@ void app_UART_Init(void)
 	UART_EnableTx(UART2, TRUE);
 
 	/* UART Interrupt Enable */
-	UART_EnableInterrupts(UART2, kUART_RxDataRegFullInterruptEnable | kUART_TxDataRegEmptyInterruptEnable);//QUE Interrumpio?
+	UART_EnableInterrupts(UART2, kUART_RxDataRegFullInterruptEnable);//QUE Interrumpio?
 	EnableIRQ(UART2_IRQn);//QUIEN atendera la interrupcion?
 }
 
@@ -162,7 +162,7 @@ T_UBYTE app_UART_RXHasData(void)
 	T_ULONG lul_Status;
 	T_UBYTE lub_Return;
 
-	lul_Status = UART_GetStatusFlags(UART1);
+	lul_Status = UART_GetStatusFlags(UART2);
 
 	/* Check if RX Register is full */
 	/* Check bit 5 from UART->S1 register */
@@ -183,7 +183,7 @@ T_UBYTE app_UART_TXIsEmpty(void)
 	T_ULONG lul_Status;
 	T_UBYTE lub_Return;
 
-	lul_Status = UART_GetStatusFlags(UART1);
+	lul_Status = UART_GetStatusFlags(UART2);
 
 	/* Check if TX Register is empty */
 	/* Check bit 7 from UART->S1 register */
