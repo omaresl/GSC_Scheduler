@@ -12,15 +12,38 @@
 #include "fsl_port.h"
 #include "app_UART.h"
 
-T_UBYTE rub_UART_RX_Data;
-T_UBYTE rub_UART_TX_Data;
+T_UBYTE rub_UART_RX_Data[16u];
+T_UBYTE rub_UART_TX_Data[16u];
+
+T_UBYTE rub_RXRingBufferCounter = 0u;
+T_UBYTE rub_TXRingBufferCounter = 0u;
+
+T_UBYTE rub_RXReadBufferCounter = 0u;
+T_UBYTE rub_TXReadBufferCounter = 0u;
+
+T_UBYTE rub_DataToBeRead;
+T_UBYTE rub_DataToBeWrite;
+
+T_UBYTE app_UART_RXHasData(void);
+T_UBYTE app_UART_TXIsEmpty(void);
 
 void UART2_IRQHandler(void)//COMO se trata la interrupcion
 {
 	/* RX Task */
 	if(app_UART_RXHasData() == TRUE)
 	{
-		rub_UART_RX_Data = app_UART_ReadData();
+		rub_DataToBeRead++;
+
+		rub_UART_RX_Data[rub_RXRingBufferCounter] = UART_ReadByte(UART2);
+
+		if(rub_RXRingBufferCounter < 15u)
+		{
+			rub_RXRingBufferCounter++;
+		}
+		else
+		{
+			rub_RXRingBufferCounter = 0u;
+		}
 	}
 	else
 	{
@@ -30,7 +53,24 @@ void UART2_IRQHandler(void)//COMO se trata la interrupcion
 	/* TX Task */
 	if(app_UART_TXIsEmpty() == TRUE)
 	{
-		app_UART_WriteData(rub_UART_TX_Data);
+		if(rub_DataToBeWrite)
+		{
+			rub_DataToBeWrite--;
+			UART_WriteByte(UART2, rub_UART_TX_Data[rub_TXRingBufferCounter]);
+
+			if(rub_RXRingBufferCounter < 15u)
+			{
+				rub_TXRingBufferCounter++;
+			}
+			else
+			{
+				rub_TXRingBufferCounter = 0u;
+			}
+		}
+		else
+		{
+			UART_DisableInterrupts(UART2, kUART_TxDataRegEmptyInterruptEnable);
+		}
 	}
 	else
 	{
@@ -73,12 +113,48 @@ void app_UART_Init(void)
 
 T_UBYTE app_UART_ReadData(void)
 {
-	return UART_ReadByte(UART2);
+	T_UBYTE lub_Data;
+
+	lub_Data = 0u;
+
+	if(rub_DataToBeRead > 0u)
+	{
+		rub_DataToBeRead--;
+		lub_Data = rub_UART_RX_Data[rub_RXReadBufferCounter];
+
+		if(rub_RXReadBufferCounter < 15u)
+		{
+			rub_RXReadBufferCounter++;
+		}
+		else
+		{
+			rub_RXReadBufferCounter = 0u;
+		}
+	}
+	else
+	{
+		/* Do Nothing */
+	}
+
+	return lub_Data;
 }
 
 void app_UART_WriteData(T_UBYTE lub_Data)
 {
-	UART_WriteByte(UART2, lub_Data);
+	rub_DataToBeWrite++;
+
+	rub_UART_TX_Data[rub_TXReadBufferCounter] = lub_Data;
+
+	if(rub_TXReadBufferCounter < 15u)
+	{
+		rub_TXReadBufferCounter++;
+	}
+	else
+	{
+		rub_TXReadBufferCounter = 0u;
+	}
+
+	UART_EnableInterrupts(UART2, kUART_TxDataRegEmptyInterruptEnable);
 }
 
 T_UBYTE app_UART_RXHasData(void)
