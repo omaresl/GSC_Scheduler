@@ -21,8 +21,8 @@ T_UBYTE rub_TXRingBufferCounter = 0u;
 T_UBYTE rub_RXReadBufferCounter = 0u;
 T_UBYTE rub_TXReadBufferCounter = 0u;
 
-T_UBYTE rub_DataToBeRead;
-T_UBYTE rub_DataToBeWrite;
+T_UBYTE rub_DataToBeRead = 0u;
+T_UBYTE rub_DataToBeWrite = 0u;
 
 T_UBYTE app_UART_RXHasData(void);
 T_UBYTE app_UART_TXIsEmpty(void);
