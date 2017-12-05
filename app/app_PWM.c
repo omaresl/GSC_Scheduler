@@ -35,7 +35,6 @@ void app_PWM_Init(void)
 	tpm_chnl_pwm_signal_param_t ls_PWMParam;
 
 	/* Enable Clock */
-	//CLOCK_EnableClock(kCLOCK_Tpm2); //FOR LED RED
 	CLOCK_SetTpmClock(1);
 
 	/* PWM PIN Config */

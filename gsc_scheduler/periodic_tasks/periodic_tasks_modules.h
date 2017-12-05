@@ -35,7 +35,7 @@
 #include "../app/app_Init.h"
 #include "../app/app_BtnDbnc.h"
 #include "app/app_PWM.h"
-#include "app/RGB_LEDs.h"
+#include "app/app_WindowLifterSM.h"
 /*============================================================================*/
 
 #endif

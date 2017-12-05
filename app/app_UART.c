@@ -5,6 +5,9 @@
  *      Author: uidj2522
  */
 
+/******************************************
+ * Includes
+ ******************************************/
 #include "MKL25Z4.h"
 #include "stdtypedef.h"
 #include "fsl_uart.h"
@@ -13,60 +16,77 @@
 #include "app_UART.h"
 #include "fsl_common.h"
 
-T_UBYTE rub_UART_RX_Data[16u];
-T_UBYTE rub_UART_TX_Data[16u];
+/******************************************
+ * Variables
+ ******************************************/
+T_UBYTE raub_UART_RX_Data[APP_UART_BUFFER_SIZE];
+T_UBYTE raub_UART_TX_Data[APP_UART_BUFFER_SIZE];
 
-T_UBYTE rub_RXRingBufferCounter = 0u;
-T_UBYTE rub_TXRingBufferCounter = 0u;
-
-T_UBYTE rub_RXReadBufferCounter = 0u;
-T_UBYTE rub_TXReadBufferCounter = 0u;
+T_UBYTE rub_RXBufferFullFlag = FALSE;
+T_UBYTE rub_TXBufferFullFlag = FALSE;
 
 T_UBYTE rub_DataToBeRead = 0u;
 T_UBYTE rub_DataToBeWrite = 0u;
 
+/******************************************
+ * Prototypes
+ ******************************************/
 T_UBYTE app_UART_RXHasData(void);
 T_UBYTE app_UART_TXIsEmpty(void);
 
-void UART2_IRQHandler(void)//COMO se trata la interrupcion
+/******************************************
+ * Code
+ ******************************************/
+
+/***********************************************
+ * Function Name: UART2_IRQHandler
+ * Description: TBD
+ ***********************************************/
+void UART2_IRQHandler(void)
 {
 	/* RX Task */
-	if(app_UART_RXHasData() == TRUE)
+	if((app_UART_RXHasData() == TRUE) && \
+			(rub_RXBufferFullFlag == FALSE))
 	{
-		rub_DataToBeRead++;
-
-		rub_UART_RX_Data[rub_RXRingBufferCounter] = UART_ReadByte(UART2);
-
-		if(rub_RXRingBufferCounter < 15u)
+		if(rub_DataToBeRead < APP_UART_BUFFER_SIZE - 1)
 		{
-			rub_RXRingBufferCounter++;
+			raub_UART_RX_Data[rub_DataToBeRead] = UART_ReadByte(UART2);
+			rub_DataToBeRead++;
 		}
 		else
 		{
-			rub_RXRingBufferCounter = 0u;
+			rub_RXBufferFullFlag = TRUE;
 		}
 	}
 	else
 	{
-		/* Do Nothing */
+		if(rub_RXBufferFullFlag == TRUE)
+		{
+			//TODO: Error Callback
+		}
+		else
+		{
+			/* Do Nothing */
+		}
+
 	}
 
 	/* TX Task */
 	if(app_UART_TXIsEmpty() == TRUE)
 	{
-		if(rub_DataToBeWrite)
+		/* Check if there is data to be write */
+		if(rub_DataToBeWrite > 0u)
 		{
 			rub_DataToBeWrite--;
-			UART_WriteByte(UART2, rub_UART_TX_Data[rub_TXRingBufferCounter]);
+			UART_WriteByte(UART2, raub_UART_TX_Data[0]);
 
-			if(rub_RXRingBufferCounter < 15u)
+			//Re arrange the TX Buffer
+			for(T_UBYTE lub_i = 0; lub_i < rub_DataToBeWrite; lub_i++)
 			{
-				rub_TXRingBufferCounter++;
+				raub_UART_TX_Data[lub_i] = raub_UART_TX_Data[lub_i + 1];
 			}
-			else
-			{
-				rub_TXRingBufferCounter = 0u;
-			}
+
+			rub_TXBufferFullFlag = FALSE;
 		}
 		else
 		{
@@ -75,10 +95,14 @@ void UART2_IRQHandler(void)//COMO se trata la interrupcion
 	}
 	else
 	{
-		/* Do nothing */
+		/* Do Nothing */
 	}
 }
 
+/***********************************************
+ * Function Name: app_UART_Init
+ * Description: TBD
+ ***********************************************/
 void app_UART_Init(void)
 {
 	port_pin_config_t ls_PinConfig;
@@ -100,63 +124,70 @@ void app_UART_Init(void)
 	ls_UartConfig.parityMode = kUART_ParityEven;
 
 	/* UART Init */
-	UART_Init(UART2, &ls_UartConfig, CLOCK_GetPllFllSelClkFreq());
+	UART_Init(UART2, &ls_UartConfig, CLOCK_GetFreq(BUS_CLK));
 
 	/* UART Enable */
 	UART_EnableRx(UART2, TRUE);
 	UART_EnableTx(UART2, TRUE);
 
 	/* UART Interrupt Enable */
-	UART_EnableInterrupts(UART2, kUART_RxDataRegFullInterruptEnable);//QUE Interrumpio?
-	EnableIRQ(UART2_IRQn);//QUIEN atendera la interrupcion?
+	UART_EnableInterrupts(UART2, kUART_RxDataRegFullInterruptEnable);
+	EnableIRQ(UART2_IRQn);
 }
 
-T_UBYTE app_UART_ReadData(void)
+/***********************************************
+ * Function Name: app_UART_ReadData
+ * Description: TBD
+ ***********************************************/
+T_UBYTE app_UART_ReadData(T_UBYTE * lpub_Dst)
 {
-	T_UBYTE lub_Data;
-
-	lub_Data = 0u;
+	T_UBYTE lub_Status;
 
 	if(rub_DataToBeRead > 0u)
 	{
 		rub_DataToBeRead--;
-		lub_Data = rub_UART_RX_Data[rub_RXReadBufferCounter];
+		*lpub_Dst = raub_UART_RX_Data[0];
 
-		if(rub_RXReadBufferCounter < 15u)
+		/* Re arrange the RX Buffer */
+		for(T_UBYTE lub_i = 0; lub_i < rub_DataToBeRead; lub_i++)
 		{
-			rub_RXReadBufferCounter++;
+			raub_UART_RX_Data[lub_i] = raub_UART_RX_Data[lub_i + 1];
 		}
-		else
-		{
-			rub_RXReadBufferCounter = 0u;
-		}
+
+		rub_RXBufferFullFlag = FALSE;
+		lub_Status = TRUE;
 	}
 	else
 	{
-		/* Do Nothing */
+		lub_Status = FALSE;
 	}
 
-	return lub_Data;
+	return lub_Status;
 }
 
+/***********************************************
+ * Function Name: app_UART_WriteData
+ * Description: TBD
+ ***********************************************/
 void app_UART_WriteData(T_UBYTE lub_Data)
 {
-	rub_DataToBeWrite++;
-
-	rub_UART_TX_Data[rub_TXReadBufferCounter] = lub_Data;
-
-	if(rub_TXReadBufferCounter < 15u)
+	if(rub_DataToBeWrite < APP_UART_BUFFER_SIZE - 1)
 	{
-		rub_TXReadBufferCounter++;
+		raub_UART_TX_Data[rub_DataToBeWrite] = lub_Data;
+		rub_DataToBeWrite++;
 	}
 	else
 	{
-		rub_TXReadBufferCounter = 0u;
+		rub_TXBufferFullFlag = TRUE;
 	}
 
 	UART_EnableInterrupts(UART2, kUART_TxDataRegEmptyInterruptEnable);
 }
 
+/***********************************************
+ * Function Name: app_UART_RXHasData
+ * Description: TBD
+ ***********************************************/
 T_UBYTE app_UART_RXHasData(void)
 {
 	T_ULONG lul_Status;
@@ -178,6 +209,10 @@ T_UBYTE app_UART_RXHasData(void)
 	return lub_Return;
 }
 
+/***********************************************
+ * Function Name: app_UART_TXIsEmpty
+ * Description: TBD
+ ***********************************************/
 T_UBYTE app_UART_TXIsEmpty(void)
 {
 	T_ULONG lul_Status;
@@ -199,6 +234,10 @@ T_UBYTE app_UART_TXIsEmpty(void)
 	return lub_Return;
 }
 
+/***********************************************
+ * Function Name: app_UART_Task
+ * Description: TBD
+ ***********************************************/
 void app_UART_Task(void)
 {
 

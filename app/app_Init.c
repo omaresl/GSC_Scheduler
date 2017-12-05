@@ -13,6 +13,7 @@
 #include "app_BtnDbnc.h"
 #include "app_PWM.h"
 #include "app_UART.h"
+#include "app_WindowLifterSM.h"
 
 /******************************************
  * Defines
@@ -48,4 +49,6 @@ void app_Init(void)
     /* UART Init */
     app_UART_Init();
 
+    /* Window Lifter Init */
+    app_WindowLifterSM_Init();
 }

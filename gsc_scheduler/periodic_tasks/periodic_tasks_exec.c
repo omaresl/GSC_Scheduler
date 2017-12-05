@@ -68,6 +68,7 @@
  **************************************************************/
  void periodic_tasks_exec_20tks(void)
  {
+	 app_WindowLifterSM_Task();
 	 app_PWM_Task();
  }
  
