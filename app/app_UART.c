@@ -15,6 +15,7 @@
 #include "fsl_port.h"
 #include "app_UART.h"
 #include "fsl_common.h"
+#include "fsl_lpsci.h"
 
 /******************************************
  * Variables
@@ -42,7 +43,7 @@ T_UBYTE app_UART_TXIsEmpty(void);
  * Function Name: UART2_IRQHandler
  * Description: TBD
  ***********************************************/
-void UART2_IRQHandler(void)
+void UART0_IRQHandler(void)
 {
 	/* RX Task */
 	if((app_UART_RXHasData() == TRUE) && \
@@ -50,7 +51,7 @@ void UART2_IRQHandler(void)
 	{
 		if(rub_DataToBeRead < APP_UART_BUFFER_SIZE - 1)
 		{
-			raub_UART_RX_Data[rub_DataToBeRead] = UART_ReadByte(UART2);
+			raub_UART_RX_Data[rub_DataToBeRead] = LPSCI_ReadByte(UART0);
 			rub_DataToBeRead++;
 		}
 		else
@@ -78,7 +79,7 @@ void UART2_IRQHandler(void)
 		if(rub_DataToBeWrite > 0u)
 		{
 			rub_DataToBeWrite--;
-			UART_WriteByte(UART2, raub_UART_TX_Data[0]);
+			LPSCI_WriteByte(UART0, raub_UART_TX_Data[0]);
 
 			//Re arrange the TX Buffer
 			for(T_UBYTE lub_i = 0; lub_i < rub_DataToBeWrite; lub_i++)
@@ -90,7 +91,8 @@ void UART2_IRQHandler(void)
 		}
 		else
 		{
-			UART_DisableInterrupts(UART2, kUART_TxDataRegEmptyInterruptEnable);
+			//UART_DisableInterrupts(APP_UART_BASE, kUART_TxDataRegEmptyInterruptEnable);
+			LPSCI_DisableInterrupts(UART0, kLPSCI_TxDataRegEmptyInterruptEnable);
 		}
 	}
 	else
@@ -124,15 +126,15 @@ void app_UART_Init(void)
 	ls_UartConfig.parityMode = kUART_ParityEven;
 
 	/* UART Init */
-	UART_Init(UART2, &ls_UartConfig, CLOCK_GetFreq(BUS_CLK));
+	UART_Init(APP_UART_BASE, &ls_UartConfig, CLOCK_GetFreq(BUS_CLK));
 
 	/* UART Enable */
-	UART_EnableRx(UART2, TRUE);
-	UART_EnableTx(UART2, TRUE);
+	UART_EnableRx(APP_UART_BASE, TRUE);
+	UART_EnableTx(APP_UART_BASE, TRUE);
 
 	/* UART Interrupt Enable */
-	UART_EnableInterrupts(UART2, kUART_RxDataRegFullInterruptEnable);
-	EnableIRQ(UART2_IRQn);
+//	UART_EnableInterrupts(APP_UART_BASE, kUART_RxDataRegFullInterruptEnable);
+//	EnableIRQ(UART2_IRQn);
 }
 
 /***********************************************
@@ -181,7 +183,8 @@ void app_UART_WriteData(T_UBYTE lub_Data)
 		rub_TXBufferFullFlag = TRUE;
 	}
 
-	UART_EnableInterrupts(UART2, kUART_TxDataRegEmptyInterruptEnable);
+	//UART_EnableInterrupts(APP_UART_BASE, kUART_TxDataRegEmptyInterruptEnable);
+	LPSCI_EnableInterrupts(UART0, kLPSCI_TxDataRegEmptyInterruptEnable);
 }
 
 /***********************************************
@@ -193,11 +196,11 @@ T_UBYTE app_UART_RXHasData(void)
 	T_ULONG lul_Status;
 	T_UBYTE lub_Return;
 
-	lul_Status = UART_GetStatusFlags(UART2);
+	lul_Status = LPSCI_GetStatusFlags(UART0);
 
 	/* Check if RX Register is full */
 	/* Check bit 5 from UART->S1 register */
-	if((lul_Status & (kUART_RxDataRegFullFlag) ) == kUART_RxDataRegFullFlag)
+	if((lul_Status & (kLPSCI_RxDataRegFullFlag) ) == kLPSCI_RxDataRegFullFlag)
 	{
 		lub_Return = TRUE;
 	}
@@ -218,7 +221,7 @@ T_UBYTE app_UART_TXIsEmpty(void)
 	T_ULONG lul_Status;
 	T_UBYTE lub_Return;
 
-	lul_Status = UART_GetStatusFlags(UART2);
+	lul_Status = UART_GetStatusFlags(UART0);
 
 	/* Check if TX Register is empty */
 	/* Check bit 7 from UART->S1 register */

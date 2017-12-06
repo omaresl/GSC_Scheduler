@@ -28,10 +28,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "MKL25Z4.h"
 #include <stdint.h>
 #include "board.h"
 #include "fsl_debug_console.h"
 #include "fsl_common.h"
+#include "fsl_lpsci.h"
 
 /*******************************************************************************
  * Variables
@@ -54,4 +56,7 @@ void BOARD_InitDebugConsole(void)
 
     uartClkSrcFreq = BOARD_DEBUG_UART_CLK_FREQ;
     DbgConsole_Init(BOARD_DEBUG_UART_BASEADDR, BOARD_DEBUG_UART_BAUDRATE, BOARD_DEBUG_UART_TYPE, uartClkSrcFreq);
+    /* Enable RX interrupt. */
+    LPSCI_EnableInterrupts((UART0_Type*)BOARD_DEBUG_UART_BASEADDR, kLPSCI_RxDataRegFullInterruptEnable);
+    EnableIRQ(UART0_IRQn);
 }

@@ -42,5 +42,6 @@ typedef enum
  ******************************************/
 extern void app_WindowLifterSM_Init(void);
 extern void app_WindowLifterSM_Task(void);
+extern void app_WindowLifterSM_ActionsTask(void);
 
 #endif /* APP_WINDOWLIFTERSM_H_ */

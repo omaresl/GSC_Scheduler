@@ -17,16 +17,25 @@
 /******************************************
  * Defines
  ******************************************/
-#define OPENING_CMD			(T_UBYTE)(0x01u)
-#define CLOSING_CMD   		(T_UBYTE)(0x02u)
-#define FULLY_OPEN_CMD      (T_UBYTE)(0x03u)
-#define FULLY_CLOSED_CMD    (T_UBYTE)(0x04u)
-#define STOP_CMD            (T_UBYTE)(0x0Fu)
+#define OPENING_CMD					(T_UBYTE)(0x01u)
+#define CLOSING_CMD   				(T_UBYTE)(0x02u)
+#define FULLY_OPEN_CMD      		(T_UBYTE)(0x03u)
+#define FULLY_CLOSED_CMD    		(T_UBYTE)(0x04u)
+#define STOP_CMD            		(T_UBYTE)(0x0Fu)
+
+#define NRC_NOT_VALID_CMD			(T_UBYTE)(0x05u)
+#define NRC_VALIDATION_FAILED   	(T_UBYTE)(0x06u)
+#define NRC_OPEN_CMD_W_FOPEN  		(T_UBYTE)(0x07u)
+#define NRC_CLOSED_CMD_W_FCLOSED 	(T_UBYTE)(0x08u)
+
+#define APP_WINDOW_LIFTER_FULL_OPEN_VALUE		(T_UBYTE)(0u)
+#define APP_WINDOW_LIFTER_FULL_CLOSED_VALUE		(T_UBYTE)(10u)
+#define APP_WINDOW_LIFTER_SINGLE_STEP			(T_UBYTE)(2u)
 
 /******************************************
  * Constants
  ******************************************/
-const T_UBYTE caub_WindowLifterCommands[5] =
+const T_UBYTE caub_WindowLifterCommands[] =
 {
 		OPENING_CMD,
 		CLOSING_CMD,
@@ -35,13 +44,30 @@ const T_UBYTE caub_WindowLifterCommands[5] =
 		STOP_CMD
 };
 
+const T_UBYTE caub_WindowLifterErrorCodes[] =
+{
+		OPENING_CMD,
+		CLOSING_CMD,
+		FULLY_OPEN_CMD,
+		FULLY_CLOSED_CMD,
+};
+
+typedef enum
+{
+	UPPER_LED,
+	LOWER_LED
+}E_LEDTOBETOGGLE;
+
 /******************************************
  * Variables
- ******************************************/
+ ***************s***************************/
 E_WINDOW_LIFTER_STATE re_WindowLifterState = WINDOW_LIFTER_STATE_IDLE;
 T_UBYTE rub_CMDIndex;
 T_UBYTE rub_WindowLifterExecuteFlag;
 T_UBYTE rub_LastValidCMDReceived;
+T_UBYTE rub_WindowPosition;
+T_UBYTE rub_WindowLifterTaskCounter;
+T_UBYTE rub_LEDToToggle;
 
 /******************************************
  * Prototypes
@@ -51,6 +77,9 @@ static T_UBYTE app_WindowLifterSM_GetUpperNibble(T_UBYTE lub_Data);
 static T_UBYTE app_WindowLifterSM_GetLowerNibble(T_UBYTE lub_Data);
 static T_UBYTE app_WindowLifterSM_GetJoinNibbles(T_UBYTE lub_A,T_UBYTE lub_B);
 static T_UBYTE app_WindowLifterSM_CommandValidation(T_UBYTE lub_Command);
+static void app_WindowLifterSM_SendPositiveResponse(void);
+static void app_WindowLifterSM_SendNegativeResponse(T_UBYTE lub_NRC);
+static void app_WindowLifterSM_ExecuteRequest(void);
 
 /******************************************
  * Code
@@ -65,6 +94,7 @@ void app_WindowLifterSM_Init(void)
 	re_WindowLifterState = WINDOW_LIFTER_STATE_IDLE;
 	rub_CMDIndex = 0u;
 	rub_WindowLifterExecuteFlag = FALSE;
+	rub_WindowPosition = APP_WINDOW_LIFTER_FULL_CLOSED_VALUE;
 }
 
 /***********************************************
@@ -81,29 +111,18 @@ void app_WindowLifterSM_Task(void)
 		/* Wait for a RX Succesfull */
 		if(app_UART_ReadData(&lub_CMD_Received) == TRUE)
 		{//Data received and stored
-			/* Check if received data is valid */
-			for(T_UBYTE lub_i = 0; lub_i < sizeof(caub_WindowLifterCommands);lub_i++)
-			{
-				/* Compare with the cmd table */
-				if((lub_CMD_Received & APP_WINDOW_LIFTER_CMD_MASK) == caub_WindowLifterCommands[lub_i])
-				{//Command Valid
-					/* Store CMD Valid Index */
-					rub_CMDIndex = lub_i;
 
-					/* Store CMD Valid */
-					rub_LastValidCMDReceived = lub_CMD_Received;
-
-					/* Go to Decrypt State */
-					re_WindowLifterState = WINDOW_LIFTER_STATE_DECRYPT;
-
-					/* Finish the loop */
-					lub_i = sizeof(caub_WindowLifterCommands);
-				}
-				else
-				{
-					/* Command not match with actual element */
-				}
+			if(app_WindowLifterSM_CommandValidation(lub_CMD_Received) == TRUE)
+			{//Command Valid
+				/* Go to Decrypt State */
+				re_WindowLifterState = WINDOW_LIFTER_STATE_DECRYPT;
 			}
+			else
+			{//Command Invalid
+				/* Send NRC */
+				app_WindowLifterSM_SendNegativeResponse(NRC_NOT_VALID_CMD);
+			}
+
 #ifdef APP_WINDOW_LIFTER_DEBUG_IN_CONSOLE
 			if(re_WindowLifterState == WINDOW_LIFTER_STATE_DECRYPT)
 			{
@@ -131,25 +150,29 @@ void app_WindowLifterSM_Task(void)
 			/* Check if Data received is correctly encrypted */
 			if(app_WindowLifterSM_DecryptData(lub_CMD_Received) == TRUE)
 			{//Correctly Encrypted
+
 				/* Go to Execute State */
 				re_WindowLifterState = WINDOW_LIFTER_STATE_EXECUTE;
 			}
 			else
 			{//Incorrectly Encrypted
+				/* Send Negative Response */
+				app_WindowLifterSM_SendNegativeResponse(NRC_VALIDATION_FAILED);
+
 				/* Go to Error State */
 				re_WindowLifterState = WINDOW_LIFTER_STATE_ERROR;
 			}
 #ifdef APP_WINDOW_LIFTER_DEBUG_IN_CONSOLE
-		if(re_WindowLifterState == WINDOW_LIFTER_STATE_EXECUTE)
-		{
-			printf("\nCommand Decrypted Correctly\n");
-			printf("\nExecute Command\n");
-		}
-		else
-		{
-			printf("\nCommand Decryption Failed\n");
-			printf("\nGo to Error State\n");
-		}
+			if(re_WindowLifterState == WINDOW_LIFTER_STATE_EXECUTE)
+			{
+				printf("\nCommand Decrypted Correctly\n");
+				printf("\nExecute Command\n");
+			}
+			else
+			{
+				printf("\nCommand Decryption Failed\n");
+				printf("\nGo to Error State\n");
+			}
 #endif
 		}
 		else
@@ -161,8 +184,10 @@ void app_WindowLifterSM_Task(void)
 	{
 		/* Execute Command */
 		RED_TOGGLE;
+		app_WindowLifterSM_ExecuteRequest();
 
 		/* Send Positive Response */
+		app_WindowLifterSM_SendPositiveResponse();
 
 		/* Go to Idle State */
 		re_WindowLifterState = WINDOW_LIFTER_STATE_IDLE;
@@ -274,23 +299,108 @@ static T_UBYTE app_WindowLifterSM_CommandValidation(T_UBYTE lub_Command)
 {
 	T_UBYTE lub_Result;
 
-	if(lub_Command == CMD_OPENING ||
-			lub_Command == CMD_CLOSING||
-			lub_Command == CMD_FULLOPEN||
-			lub_Command == CMD_FULLCLOSE||
-			lub_Command == CMD_STOP
-			)
+	lub_Result = FALSE;
+
+	/* Check if received data is valid */
+	for(T_UBYTE lub_i = 0; lub_i < sizeof(caub_WindowLifterCommands);lub_i++)
 	{
-		lub_Result = TRUE;
-	}
-	else
-	{
-		lub_Result = FALSE;
+		/* Compare with the cmd table */
+		if((lub_Command & APP_WINDOW_LIFTER_CMD_MASK) == caub_WindowLifterCommands[lub_i])
+		{//Command Valid
+			/* Store CMD Valid Index */
+			rub_CMDIndex = lub_i;
+
+			/* Store CMD Valid */
+			rub_LastValidCMDReceived = lub_Command;
+
+			/* Positive Reult */
+			lub_Result = TRUE;
+
+			/* Finish the loop */
+			lub_i = sizeof(caub_WindowLifterCommands);
+		}
+		else
+		{
+			/* Command not match with actual element */
+		}
 	}
 
 	return lub_Result;
 }
 
+/***********************************************
+ * Function Name: app_WindowLifterSM_SendPositiveResponse
+ * Description: TBD
+ ***********************************************/
+static void app_WindowLifterSM_SendPositiveResponse(void)
+{
+	/*Send Last Valid Command Received and Current Position*/
+	app_UART_WriteData(app_WindowLifterSM_GetJoinNibbles(rub_WindowPosition,rub_LastValidCMDReceived));
+}
 
+/***********************************************
+ * Function Name: app_WindowLifterSM_SendNegativeResponse
+ * Description: TBD
+ ***********************************************/
+static void app_WindowLifterSM_SendNegativeResponse(T_UBYTE lub_NRC)
+{
+	/*Send Last Valid Command Received and Current Position*/
+	app_UART_WriteData(app_WindowLifterSM_GetJoinNibbles(rub_WindowPosition, lub_NRC));
+}
 
+/***********************************************
+ * Function Name: app_WindowLifterSM_ExecuteRequest
+ * Description: TBD
+ ***********************************************/
+static void app_WindowLifterSM_ExecuteRequest(void)
+{
+	/* Set the flag for execution */
+	rub_WindowLifterExecuteFlag = TRUE;
 
+	/* Clear Task Counter */
+	rub_WindowLifterTaskCounter = 0u;
+}
+
+/***********************************************
+ * Function Name: app_WindowLifterSM_ActionsTask
+ * Description: TBD
+ ***********************************************/
+void app_WindowLifterSM_ActionsTask(void)
+{
+	/* Check if an execution was requested */
+	if(rub_WindowLifterExecuteFlag == TRUE)
+	{//Execution Requested
+		/* Check which command was received */
+		switch(rub_LastValidCMDReceived)
+		{
+		case OPENING_CMD:
+		{/* Increase the Window position by 2 steps */
+			rub_WindowLifterExecuteFlag = FALSE;
+		}break;
+		case CLOSING_CMD:
+		{
+
+		}break;
+		case FULLY_OPEN_CMD:
+		{
+
+		}break;
+		case FULLY_CLOSED_CMD:
+		{
+
+		}break;
+		case STOP_CMD:
+		{
+
+		}break;
+		default:
+		{
+
+		}break;
+		}
+	}
+	else
+	{//Execution not requested
+		/* Do Nothing */
+	}
+}
