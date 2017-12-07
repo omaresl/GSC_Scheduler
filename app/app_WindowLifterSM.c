@@ -13,24 +13,9 @@
 #include "app_WindowLifterSM.h"
 #include "app_UART.h"
 #include "RGB_LEDs.h"
-
-/******************************************
- * Defines
- ******************************************/
-#define OPENING_CMD					(T_UBYTE)(0x01u)
-#define CLOSING_CMD   				(T_UBYTE)(0x02u)
-#define FULLY_OPEN_CMD      		(T_UBYTE)(0x03u)
-#define FULLY_CLOSED_CMD    		(T_UBYTE)(0x04u)
-#define STOP_CMD            		(T_UBYTE)(0x0Fu)
-
-#define NRC_NOT_VALID_CMD			(T_UBYTE)(0x05u)
-#define NRC_VALIDATION_FAILED   	(T_UBYTE)(0x06u)
-#define NRC_OPEN_CMD_W_FOPEN  		(T_UBYTE)(0x07u)
-#define NRC_CLOSED_CMD_W_FCLOSED 	(T_UBYTE)(0x08u)
-
-#define APP_WINDOW_LIFTER_FULL_OPEN_VALUE		(T_UBYTE)(0u)
-#define APP_WINDOW_LIFTER_FULL_CLOSED_VALUE		(T_UBYTE)(10u)
-#define APP_WINDOW_LIFTER_SINGLE_STEP			(T_UBYTE)(2u)
+#include "fsl_clock.h"
+#include "fsl_port.h"
+#include "fsl_gpio.h"
 
 /******************************************
  * Constants
@@ -41,6 +26,7 @@ const T_UBYTE caub_WindowLifterCommands[] =
 		CLOSING_CMD,
 		FULLY_OPEN_CMD,
 		FULLY_CLOSED_CMD,
+		SET_TO_ONE_CMD,
 		STOP_CMD
 };
 
@@ -52,11 +38,47 @@ const T_UBYTE caub_WindowLifterErrorCodes[] =
 		FULLY_CLOSED_CMD,
 };
 
-typedef enum
+const T_UBYTE caub_WindowLifterLedPinNumbers[] =
 {
-	UPPER_LED,
-	LOWER_LED
-}E_LEDTOBETOGGLE;
+		APP_WINDOW_LIFTER_LED0_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED1_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED2_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED3_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED4_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED5_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED6_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED7_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED8_PIN_NUMBER,
+		APP_WINDOW_LIFTER_LED9_PIN_NUMBER
+};
+
+const PORT_Type* caub_WindowLifterLedPORTBases[] =
+{
+		APP_WINDOW_LIFTER_LED0_PORT_BASE,
+		APP_WINDOW_LIFTER_LED1_PORT_BASE,
+		APP_WINDOW_LIFTER_LED2_PORT_BASE,
+		APP_WINDOW_LIFTER_LED3_PORT_BASE,
+		APP_WINDOW_LIFTER_LED4_PORT_BASE,
+		APP_WINDOW_LIFTER_LED5_PORT_BASE,
+		APP_WINDOW_LIFTER_LED6_PORT_BASE,
+		APP_WINDOW_LIFTER_LED7_PORT_BASE,
+		APP_WINDOW_LIFTER_LED8_PORT_BASE,
+		APP_WINDOW_LIFTER_LED9_PORT_BASE
+};
+
+const GPIO_Type* caub_WindowLifterLedGPIOBases[] =
+{
+		APP_WINDOW_LIFTER_LED0_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED1_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED2_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED3_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED4_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED5_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED6_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED7_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED8_GPIO_BASE,
+		APP_WINDOW_LIFTER_LED9_GPIO_BASE
+};
 
 /******************************************
  * Variables
@@ -68,6 +90,8 @@ T_UBYTE rub_LastValidCMDReceived;
 T_UBYTE rub_WindowPosition;
 T_UBYTE rub_WindowLifterTaskCounter;
 T_UBYTE rub_LEDToToggle;
+static T_UBYTE rub_BlinkRequestFlag = FALSE;
+E_LED_SELECTOR rub_BlinkLedSelector;
 
 /******************************************
  * Prototypes
@@ -91,9 +115,31 @@ static void app_WindowLifterSM_ExecuteRequest(void);
  ***********************************************/
 void app_WindowLifterSM_Init(void)
 {
+	port_pin_config_t lps_PortConfig;
+	gpio_pin_config_t lps_GpioConfig;
+
+	/* Pin Initialization */
+	CLOCK_EnableClock(kCLOCK_PortC);
+
+	lps_PortConfig.mux = kPORT_MuxAsGpio;
+
+	for(T_UBYTE lub_i = 0; lub_i < sizeof(caub_WindowLifterLedPinNumbers);lub_i++)
+	{
+		PORT_SetPinConfig((PORT_Type*)caub_WindowLifterLedPORTBases[lub_i],caub_WindowLifterLedPinNumbers[lub_i], &lps_PortConfig);
+	}
+
+	lps_GpioConfig.outputLogic = TRUE;
+	lps_GpioConfig.pinDirection = kGPIO_DigitalOutput;
+
+	for(T_UBYTE lub_i = 0; lub_i < sizeof(caub_WindowLifterLedPinNumbers);lub_i++)
+	{
+		GPIO_PinInit((GPIO_Type*)caub_WindowLifterLedGPIOBases[lub_i], caub_WindowLifterLedPinNumbers[lub_i], &lps_GpioConfig);
+	}
+
 	re_WindowLifterState = WINDOW_LIFTER_STATE_IDLE;
 	rub_CMDIndex = 0u;
 	rub_WindowLifterExecuteFlag = FALSE;
+	rub_BlinkRequestFlag = FALSE;
 	rub_WindowPosition = APP_WINDOW_LIFTER_FULL_CLOSED_VALUE;
 }
 
@@ -183,7 +229,9 @@ void app_WindowLifterSM_Task(void)
 	case WINDOW_LIFTER_STATE_EXECUTE:
 	{
 		/* Execute Command */
+#ifdef APP_WINDOW_LIFTER_DEBUG_IN_CONSOLE
 		RED_TOGGLE;
+#endif
 		app_WindowLifterSM_ExecuteRequest();
 
 		/* Send Positive Response */
@@ -370,37 +418,224 @@ void app_WindowLifterSM_ActionsTask(void)
 	/* Check if an execution was requested */
 	if(rub_WindowLifterExecuteFlag == TRUE)
 	{//Execution Requested
+		/* Increase Task Counter */
+		rub_WindowLifterTaskCounter++;
 		/* Check which command was received */
 		switch(rub_LastValidCMDReceived)
 		{
 		case OPENING_CMD:
-		{/* Increase the Window position by 2 steps */
-			rub_WindowLifterExecuteFlag = FALSE;
+		{/* Decrease the Window position by 2 steps */
+			if(rub_WindowPosition > APP_WINDOW_LIFTER_FULL_OPEN_VALUE)
+			{
+				/* Start Opening the window */
+				rub_WindowPosition--;
+				if(rub_WindowLifterTaskCounter < APP_WINDOW_LIFTER_SINGLE_STEP &&
+						rub_WindowPosition > APP_WINDOW_LIFTER_FULL_OPEN_VALUE)
+				{
+					/* Keep the Execute Flag Unchanged */
+				}
+				else
+				{
+					/* Clear the Execute Flag */
+					rub_WindowLifterExecuteFlag = FALSE;
+				}
+			}
+			else
+			{
+				/* Blink Lower Led */
+				rub_BlinkRequestFlag = TRUE;
+				rub_BlinkLedSelector = LOWER_LED;
+
+
+				/* Clear Task Counter */
+				rub_WindowLifterTaskCounter = 0u;
+
+				/* Clear the Execute Flag */
+				rub_WindowLifterExecuteFlag = FALSE;
+			}
 		}break;
 		case CLOSING_CMD:
-		{
+		{/* Increase the Window position by 2 steps */
+			if(rub_WindowPosition < APP_WINDOW_LIFTER_FULL_CLOSED_VALUE)
+			{
+				/* Start Closing the window */
+				rub_WindowPosition++;
+				if(rub_WindowLifterTaskCounter < APP_WINDOW_LIFTER_SINGLE_STEP &&
+						rub_WindowPosition < APP_WINDOW_LIFTER_FULL_CLOSED_VALUE)
+				{
+					/* Keep the Execute Flag Unchanged */
+				}
+				else
+				{
+					/* Clear the Execute Flag */
+					rub_WindowLifterExecuteFlag = FALSE;
+				}
+			}
+			else
+			{
+				/* Blink Lower Led */
+				rub_BlinkRequestFlag = TRUE;
+				rub_BlinkLedSelector = UPPER_LED;
 
+				/* Clear Task Counter */
+				rub_WindowLifterTaskCounter = 0u;
+
+				/* Clear the Execute Flag */
+				rub_WindowLifterExecuteFlag = FALSE;
+			}
 		}break;
 		case FULLY_OPEN_CMD:
-		{
+		{/* Increase the Window position until reach the min value */
+			if(rub_WindowPosition > APP_WINDOW_LIFTER_FULL_OPEN_VALUE)
+			{
+				/* Start Opening the window */
+				rub_WindowPosition--;
 
+				/* Check if Limit has been reached */
+				if(rub_WindowPosition > APP_WINDOW_LIFTER_FULL_OPEN_VALUE)
+				{
+					/* Do nothing */
+				}
+				else
+				{
+					/* Clear the Execute Flag */
+					rub_WindowLifterExecuteFlag = FALSE;
+				}
+			}
+			else
+			{
+				/* Blink Lower Led */
+				rub_BlinkRequestFlag = TRUE;
+				rub_BlinkLedSelector = LOWER_LED;
+
+				/* Clear Task Counter */
+				rub_WindowLifterTaskCounter = 0u;
+
+				/* Clear the Execute Flag */
+				rub_WindowLifterExecuteFlag = FALSE;
+			}
 		}break;
 		case FULLY_CLOSED_CMD:
-		{
+		{/* Increase the Window position until reach the max value */
+			if(rub_WindowPosition < APP_WINDOW_LIFTER_FULL_CLOSED_VALUE)
+			{
+				/* Start Closing the window */
+				rub_WindowPosition++;
 
+				/* Check if Limit has been reached */
+				if(rub_WindowPosition < APP_WINDOW_LIFTER_FULL_CLOSED_VALUE)
+				{
+					/* Do nothing */
+				}
+				else
+				{
+					/* Clear the Execute Flag */
+					rub_WindowLifterExecuteFlag = FALSE;
+				}
+			}
+			else
+			{
+				/* Blink Lower Led */
+				rub_BlinkRequestFlag = TRUE;
+				rub_BlinkLedSelector = UPPER_LED;
+
+				/* Clear Task Counter */
+				rub_WindowLifterTaskCounter = 0u;
+
+				/* Clear the Execute Flag */
+				rub_WindowLifterExecuteFlag = FALSE;
+			}
 		}break;
 		case STOP_CMD:
 		{
+			/* Clear the Execute Flag */
+			rub_WindowLifterExecuteFlag = FALSE;
+		}break;
+		case SET_TO_ONE_CMD:
+		{
+			/* Set to one window position */
+			rub_WindowPosition = 0x01u;
 
+			/* Clear the Execute Flag */
+			rub_WindowLifterExecuteFlag = FALSE;
 		}break;
 		default:
 		{
-
+			/* Do nothing */
 		}break;
 		}
 	}
 	else
 	{//Execution not requested
+		/* Do Nothing */
+	}
+
+	/* Led Controller Task */
+	app_WindowLifterSM_LEDController_Task(rub_WindowPosition);
+}
+
+/***********************************************
+ * Function Name: app_WindowLifterSM_LEDController_Task
+ * Description: TBD
+ ***********************************************/
+void app_WindowLifterSM_LEDController_Task(T_UBYTE lub_Position)
+{
+	T_UBYTE lub_LEDsOn;
+
+	/* Check if Position is less or equal as the Led outputs Available */
+	if(lub_Position <= sizeof(caub_WindowLifterLedPinNumbers))
+	{
+		/* Store the leds to must be On */
+		lub_LEDsOn = lub_Position;
+	}
+	else
+	{
+		lub_LEDsOn = sizeof(caub_WindowLifterLedPinNumbers);
+	}
+
+
+	for(T_UBYTE lub_i = 0;lub_i < sizeof(caub_WindowLifterLedPinNumbers);lub_i++)
+	{
+		if(lub_i < lub_LEDsOn)
+		{
+			/* Turn Led On */
+			GPIO_ClearPinsOutput((GPIO_Type*)caub_WindowLifterLedGPIOBases[lub_i],1u << caub_WindowLifterLedPinNumbers[lub_i]);
+		}
+		else
+		{
+			/* Turn Led Off */
+			GPIO_SetPinsOutput((GPIO_Type*)caub_WindowLifterLedGPIOBases[lub_i],1u << caub_WindowLifterLedPinNumbers[lub_i]);
+		}
+	}
+}
+
+/***********************************************
+ * Function Name: app_WindowLifterSM_LEDController_Task
+ * Description: TBD
+ ***********************************************/
+void app_WindowLifterSM_BlinkLed_Task(E_LED_SELECTOR lub_Selector)
+{
+	/* Check if blink is requested */
+	if(rub_BlinkRequestFlag == TRUE)
+	{//Blink Request
+
+		if(rub_WindowLifterTaskCounter < (APP_WINDOW_LIFTER_BLINKS_AT_LIMIT*APP_WINDOW_LIFTER_BLINKS_MULTIPLIER))
+		{
+			/* Increase Task Counter */
+			rub_WindowLifterTaskCounter++;
+			GPIO_TogglePinsOutput((GPIO_Type*)caub_WindowLifterLedGPIOBases[lub_Selector], 1 << caub_WindowLifterLedPinNumbers[lub_Selector]);
+		}
+		else
+		{
+			/* Clear Task Counter */
+			rub_WindowLifterTaskCounter = 0u;
+
+			/* Increase Task Counter */
+			rub_BlinkRequestFlag = FALSE;
+		}
+	}
+	else
+	{//Blink not requested
 		/* Do Nothing */
 	}
 }

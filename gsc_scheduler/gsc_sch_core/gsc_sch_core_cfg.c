@@ -8,7 +8,7 @@
 * created_by:      MDRR
 * date_created:    July 31 2013    
 *=============================================================================*/
-/* DESCRIPTION : Configuartion file of the "Grandpa´s Clock Scheduler" core   */
+/* DESCRIPTION : Configuartion file of the "Grandpaï¿½s Clock Scheduler" core   */
 /*============================================================================*/
 /* FUNCTION COMMENT : Here is the table to configure the tasks of the system  */
 /*                                                                            */
@@ -39,7 +39,7 @@ const S_SCH_MANAGER_EXEC_TYPE cps_mngTaskList[SCHD_MANAGERS_NUMBER] =
     {SCHM_NULL_PTR,                periodic_tasks_init_MclDrvs,      0,                     0,                         ALL_MODES},
     {SCHM_NULL_PTR,                periodic_tasks_init_SysDrvs,      0,                     0,                         ALL_MODES},
     {periodic_tasks_exec_5tks,     periodic_tasks_init_task_5tks,    5,                     5,                         ALL_MODES},
-    {periodic_tasks_exec_10tks,    periodic_tasks_init_task_10tks,   1000,                  20,                        ALL_MODES},
+    {periodic_tasks_exec_10tks,    periodic_tasks_init_task_10tks,   10,                    10,                        ALL_MODES},
     {periodic_tasks_exec_20tks,    periodic_tasks_init_task_20tks,   20,                    20,                        ALL_MODES},
     {periodic_tasks_exec_50tks,    periodic_tasks_init_task_50tks,   50,                    50,                        ALL_MODES},
     {periodic_tasks_exec_100tks,   periodic_tasks_init_task_100tks,  100,                   100,                       ALL_MODES},

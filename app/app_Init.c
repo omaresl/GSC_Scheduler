@@ -40,15 +40,6 @@ void app_Init(void)
     /* GPIO Module Init */
     app_GPIO_Init();
 
-    /* Button Debounce App Init */
-    app_BtnDbnc_Init();
-
-    /* PWM Init */
-    app_PWM_Init();
-
-    /* UART Init */
-    app_UART_Init();
-
     /* Window Lifter Init */
     app_WindowLifterSM_Init();
 }
